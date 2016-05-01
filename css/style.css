@@ -1,0 +1,26 @@
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+svg {
+  border: solid 2px black;
+}
+
+.ui-btn {
+  margin:5px;
+}
+
+svg {
+  margin-left: 25%;
+  margin-right: 25%;
+  background-image: linear-gradient(to right, white, #CCFFFF);
+}
+
+.header, .footer {
+  background-color: black !important;
+}
+
+g:active { 
+  background-color: none;
+}

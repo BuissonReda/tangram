@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Homepage</title>
+	<meta name="viewport" content="user-scalable=no initial-scale=1, maximum-scale=1">
+	<script src="js/d3.v3.min.js"></script>
+	<script src="models/models.js"></script>
+	<script src="js/my_functions.js"></script>
+	<link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+	<script>
+	
+		localStorage.level = 0;
+		problem = problems[localStorage.level];
+		
+		// -------------- Problem page creation -------------- //
+		var width = 500,
+		    height = 500,
+		    polygon_to_move = 0,
+		    polygon_dragged,
+		    sort = false,
+		    i=0, j=0;
+
+		body = d3.select("body");
+
+		problem_page = body.append("div")
+		  .attr("id", "problem_page")
+		  .attr("data-role", "page");
+
+		// --- Page content --- //
+		problem_page_main = problem_page.append("div")
+		  .attr("role", "main")
+		  .attr("class", "ui-content main");
+		
+		var svg = problem_page_main.append("svg")
+			.attr("width", width)
+			.attr("height", height);
+		
+		var separation = svg.append("rect")
+							.attr("width", width)
+							.attr("height", 1)
+							.attr("x", 0)
+							.attr("y", height-150)
+							.attr("stroke", "black");
+		
+		play_tangram(0);
+		
+		function play_tangram(level){
+			
+			// Add g with draggable class
+			var nodes = svg.selectAll(".node")
+			   .data(data)
+			   .enter()
+			   .append("g")
+				 .attr("class","draggable")
+				 .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+			
+			// Add polygons
+			nodes.append("polygon")
+			  .attr("fill","black")
+			  .attr("stroke", function(d) {return d.stroke_color;})
+			  .attr("stroke-width",2)
+			  .attr("points",function(d) {return format_shapes_data(d);});
+			  
+			var problem_nodes = svg.selectAll('.node')
+			  .data(problem)
+			  .enter()
+				.append("g")
+				.attr("transform", function(d) {
+					x = d.x;
+					y = d.y;
+					return "translate(" + x + "," + y + ")";
+				});
+
+			// Draw the problem in a small svg rect
+			problem_nodes.append("polygon")
+			  .attr("fill","black")
+			  .attr("stroke", function(d) {return "black";})
+			  .attr("stroke-width",2)
+			  .attr("points",function(d) { return format_shapes_data(d); });
+			
+			// Format shapes data
+			function format_shapes_data(d){
+				points = "";
+				for(var key in d.points_position){
+					points += d.points_position[key].x + ',' + d.points_position[key].y + ' ';
+				}
+				return points;
+			}
+			
+			// Add drag behavior to polygons
+			var drag = d3.behavior.drag()
+			.on("dragstart", function(d,i){
+				if (polygon_to_move != 0){
+					polygon_to_move.select('polygon')
+					  .transition()
+					  .attr("stroke", "gray");
+				}
+				polygon_to_move = d3.select(this);
+				
+				polygon_to_move
+				  .select('polygon')
+				  .transition()
+				  .attr("stroke", "green");
+			})
+			  .on("drag", function(d,i){
+
+				// Update polygon position during drag
+				
+				var g = polygon_to_move[0][0];
+				var data = g.__data__;
+				
+				// Set dragged to true to allow further adjustment
+				polygon_dragged = true;
+				
+				// Block polygons when they reach borders
+				if (d3.event.x > width/10 && d3.event.x < width)
+					data.x += d3.event.dx;
+
+				if (d3.event.y > height/10 && d3.event.y < height-200)
+					data.y += d3.event.dy;
+
+				d3.select(this)
+				 .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+
+				})
+			
+			  .on("dragend", function(){
+
+				var g = d3.select(this)[0][0];
+				var polyg_data = g.__data__;	
+				var distance, min_distance = 1000;
+				var polygons = d3.select('svg').selectAll('polygon');
+				var x_adjustment = 0, y_adjustment = 0;
+				var closest_polygon;
+				
+				if (polygon_dragged){
+					// Place polygon on the closest polygon
+					for (var j=0; j<polygons[0].length; j++){
+						// Avoid checking current polygon points
+						if (polyg_data.id == j+1) continue;
+						
+						// For each point of the current polygon
+						for (var key in polyg_data.points_position){
+							current_x = polyg_data.x + polyg_data.points_position[key].x;
+							current_y = polyg_data.y + polyg_data.points_position[key].y;
+							current_polygon = polygons[0][j];	
+							
+							// For each point of another polygon
+							for (var key in current_polygon.__data__.points_position){
+								closer_x = current_polygon.__data__.x + current_polygon.__data__.points_position[key].x;
+								closer_y = current_polygon.__data__.y + current_polygon.__data__.points_position[key].y;
+								distance = Math.pow(current_x - closer_x, 2) +  Math.pow(current_y - closer_y, 2);
+								if (distance < min_distance){
+									min_distance = distance;
+									x_adjustment = closer_x - current_x;
+									y_adjustment = closer_y - current_y;
+									closest_polygon = j;
+								}
+							}
+						}
+					}
+					
+					polyg_data.x += x_adjustment;
+					polyg_data.y += y_adjustment;
+					
+					d3.select(this)
+					 .transition()
+					 .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+					
+					// Check if the problem is solved
+					check_resolve();
+				}
+				
+				// Avoid adjustment if the polygon is only tapped
+				polygon_dragged = false;
+				
+			  });
+			d3.selectAll(".draggable").call(drag);
+			
+			}
+			
+			function flip(){
+				// If the losange is touched
+				if (polygon_to_move[0][0].__data__.type == "losange"){
+					if (data[6]["flipped"]){ 
+						data[6]["points_position"] = losange
+						data[6]["flipped"] = false;
+					}
+					else{
+						data[6]["points_position"] = flipped_losange
+						data[6]["flipped"] = true;
+					}
+				}
+				
+				else{
+					rotate(180);
+				}
+				
+				polygon_to_move
+				  .select('polygon')
+				  .transition()
+				  .attr("points", function(d){return format_shapes_data(d);});
+				  
+				// Check if the problem is solved
+				check_resolve();
+			}
+
+			var translation_diff;
+			var problem_values = new Array();
+
+			function check_resolve(){
+				var data_values = new Array();
+				var problem_solved = true;
+				
+				// Sort the data points problem only one time
+				if (!sort){
+					for (var i=0; i<problem.length; i++){
+						for (var key in problem[i].points_position){
+							problem_values.push(problem[i].points_position[key].x + problem[i].x + problem[i].points_position[key].y + problem[i].y);
+						}
+					}
+					problem_values.sort(function(a, b){return b-a});
+					sort = true;
+				}
+
+				// Sort the user's points data everytime he's moving a polygon
+				for (var i=0; i<data.length; i++){
+					for (var key in data[i].points_position){
+						data_values.push(data[i].points_position[key].x + data[i].x + data[i].points_position[key].y + data[i].y);
+					}
+				}
+				data_values.sort(function(a, b){return b-a});
+
+				// Check if the problem datas are equal to the user's data close to a translation
+				for (var i=0; i<data_values.length; i++){
+					// Use the first value to calculate the translation difference (we could use any value)
+					if (i == 0){
+						translation_diff = data_values[i] - problem_values[i];
+						continue;
+					}
+					
+					diff = data_values[i] - problem_values[i];
+					if (diff < translation_diff - 0.1 || diff > translation_diff + 0.1){
+						console.log(diff + ", != " + translation_diff);
+						console.log(i);
+						problem_solved = false;
+						break;
+					}
+				}
+				if (problem_solved){
+					alert("Problem solved ! ");
+					d3.select('svg_problem').selectAll('polygon')
+					  .attr("stroke", "gray");
+					localStorage.level++;
+				}
+			}
+			
+			function show_problem(){
+				console.log(JSON.stringify(data) + ",");
+			}
+				
+			// Rotate polygon on mouse click
+			function rotate(angle){
+				var data = polygon_to_move[0][0].__data__;
+
+				// Change rotation value
+				data.rotation += angle;
+				data.rotation = data.rotation % 360;
+				
+				// Change points position data
+				for (var i=0; i<angle; i+=45){
+					for (var key in data.points_position){
+						x = data.points_position[key].x;
+						y = data.points_position[key].y;
+					
+						if (angle > 0){
+							data.points_position[key].x = (Math.sqrt(2)/2)*x - (Math.sqrt(2)/2)*y;
+							data.points_position[key].y = (Math.sqrt(2)/2)*x + (Math.sqrt(2)/2)*y;
+						}
+						else{
+							data.points_position[key].x = (Math.sqrt(2)/2)*x + (Math.sqrt(2)/2)*y;
+							data.points_position[key].y = (-Math.sqrt(2)/2)*x + (Math.sqrt(2)/2)*y;
+						}
+					}
+				}
+
+				// Update the view
+				polygon_to_move
+				  .select('polygon')
+				  .transition()
+				  .attr("points",function(d) {return format_shapes_data(d);});
+				  
+				// Check if the problem is solved
+				check_resolve();
+		}
+		
+		// Arrow events to rotate and flip polygons
+		document.onkeydown = checkKey;
+
+		function checkKey(e) {
+
+			e = e || window.event;
+
+			if (e.keyCode == '38') {
+				flip();
+			}
+			else if (e.keyCode == '40') {
+				// down arrow
+			}
+			else if (e.keyCode == '37') {
+			   rotate(315);
+			}
+			else if (e.keyCode == '39') {
+			   rotate(45);
+			}
+
+		}
+		
+
+	</script>
+</body>
+</html>
